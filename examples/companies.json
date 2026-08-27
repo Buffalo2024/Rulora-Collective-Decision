@@ -1,0 +1,14 @@
+{
+  "schema_version": "synthetic-company-catalog-v1",
+  "records": [
+    {
+      "company_id": "001",
+      "company_name": "示例精密制造有限公司",
+      "industry": "通用设备制造（虚构）",
+      "province": "示例省",
+      "city": "示例市",
+      "enterprise_type": "有限责任公司",
+      "unified_social_credit_code": ""
+    }
+  ]
+}

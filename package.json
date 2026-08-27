@@ -1,0 +1,36 @@
+{
+  "name": "@rulora/collective-decision-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sanitized credit-risk research example for Rulora collective controls.",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "privacy:check": "node scripts/privacy-check.js",
+    "example": "node src/cli.js run --input examples/company-case.json --out-dir examples/output --fixture",
+    "assist:list": "node src/cli.js assist-list",
+    "health:providers": "node src/cli.js provider-health",
+    "health:alert-test": "node src/cli.js provider-alert-test",
+    "status": "node src/cli.js status",
+    "evolve": "node src/cli.js evolve",
+    "web": "node src/web-server.js",
+    "web:open": "node src/web-server.js --open",
+    "start:all": "node src/web-server.js --open"
+  },
+  "dependencies": {
+    "@langchain/core": "1.2.5",
+    "@langchain/langgraph": "1.4.9",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
+    "cheerio": "1.0.0",
+    "pdfjs-dist": "4.10.38",
+    "pg-boss": "10.4.2"
+  },
+  "peerDependencies": {
+    "@rulora/core": ">=0.1.0-alpha.2 <1"
+  }
+}
