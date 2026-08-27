@@ -8,6 +8,10 @@ A sanitized multi-agent control example for credit-risk research. It retains ind
 candidate pools, quorum, constrained reviewer selection, bounded loops, checkpoints, replay, and a local UI.
 Real company data, competition datasets, credentials, local model configuration, and runtime traces are excluded.
 
+It is an independent scenario repository for [Rulora](https://github.com/Buffalo2024/Rulora), alongside
+[Report Agent](https://github.com/Buffalo2024/Rulora-Report-Agent) and
+[AGTI](https://github.com/Buffalo2024/Rulora-AGTI).
+
 Rulora and this example were created through vibe coding by an author without a professional programming
 background. Reproducible technical review and independently evaluated improvements are welcome.
 

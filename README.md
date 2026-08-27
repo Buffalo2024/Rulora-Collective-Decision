@@ -14,6 +14,11 @@
 法定人数、受限 Reviewer、检查点、恢复和本地页面，但不包含真实企业数据、真实 API 密钥、
 比赛数据集或历史运行产物。
 
+本项目是 [Rulora](https://github.com/Buffalo2024/Rulora) 的独立场景案例，与
+[Report Agent](https://github.com/Buffalo2024/Rulora-Report-Agent) 和
+[AGTI](https://github.com/Buffalo2024/Rulora-AGTI) 使用同一套模型与程序职责边界，但保留
+独立源码、协议、测试和发布节奏。
+
 > 研究状态：由于缺少足够的标注训练数据与独立评估数据，当前风险方向和风控建议的准确性尚不高。
 > 本项目不能用于真实授信、拒贷、定价或其他影响个人与企业权益的自动决策。开源的目的之一，
 > 是获得更严格的数据、评估与工程反馈，把原型逐步改进成更可靠的产品。
