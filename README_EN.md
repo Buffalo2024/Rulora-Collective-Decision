@@ -37,6 +37,20 @@ candidate pools, gates, and final results. Recovery repairs carriers only. Adapt
 Reviewer selects frozen IDs only. Network, constraint, and broadcast loops are independently bounded.
 Checkpoints resume failed nodes only. Improvement affects a future version, never the active run.
 
+## LangGraph reference application
+
+The repository includes a no-key minimal graph for the reusable control chain:
+Recovery -> Adapter -> candidate freeze -> constrained Reviewer -> JSON delivery. Role visibility is enforced by
+Program allowlists rather than prompt convention alone.
+
+```bash
+npm run example:langgraph
+npm run test:minimal
+```
+
+See [the LangGraph reference application note](docs/langgraph-reference-application.md) for invariants,
+rejection paths, information-disclosure boundaries, and the measurements required for broader reliability claims.
+
 ```bash
 npm install
 npm test

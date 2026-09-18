@@ -16,6 +16,8 @@
     "test": "node --test tests/*.test.js",
     "privacy:check": "node scripts/privacy-check.js",
     "example": "node src/cli.js run --input examples/company-case.json --out-dir examples/output --fixture",
+    "example:langgraph": "node examples/langgraph-governed-minimal.js",
+    "test:minimal": "node --test tests/langgraph-minimal.test.js tests/competition-output-recovery.test.js tests/llm-output-trace.test.js",
     "assist:list": "node src/cli.js assist-list",
     "health:providers": "node src/cli.js provider-health",
     "health:alert-test": "node src/cli.js provider-alert-test",

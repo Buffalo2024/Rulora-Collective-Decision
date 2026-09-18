@@ -55,6 +55,20 @@ Reviewer 只能选择冻结候选池中的 ID；候选不足法定人数时流�
 模型输出先经过 Recovery 和 Adapter，再由 Core/Audit 契约校验。成功节点写入检查点，恢复时只重跑
 失败节点。
 
+## LangGraph 最小参考应用
+
+仓库现在包含一个不需要 API Key 的最小 LangGraph 案例，用于单独展示
+`Recovery → Adapter → 候选冻结 → 受限 Reviewer → JSON 交付`。案例同时将各角色可见字段
+实现为 Program 白名单，而不只是 Prompt 约定。
+
+```bash
+npm run example:langgraph
+npm run test:minimal
+```
+
+设计边界、拒绝路径和可量化的稳定性指标见
+[`docs/langgraph-reference-application.md`](docs/langgraph-reference-application.md)。
+
 ## 本地运行
 
 要求 Node.js 20+：

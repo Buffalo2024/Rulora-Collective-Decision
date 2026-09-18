@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "rulora_governed_minimal": "./examples/langgraph-governed-minimal.js:graph"
+  },
+  "env": ".env"
+}
