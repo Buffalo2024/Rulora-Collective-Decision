@@ -186,8 +186,6 @@ function validateCalibrationReview(review, { candidatePool, actionCalibration, c
   const errors = []
   if (!review || typeof review !== 'object' || Array.isArray(review)) return ['calibration review must be an object']
   for (const key of FORBIDDEN_REVIEW_KEYS) if (review[key] !== undefined) errors.push(`reviewer forbidden request: ${key}`)
-  const serialized = JSON.stringify(review)
-  if (/(?:重新检索|重新广播|重新分析|再次调用|下一轮审查)/.test(serialized)) errors.push('reviewer requested a forbidden loop or data refresh')
   const action = review.action ?? review.recommended_action
   const risk = review.risk_control_advice ?? review.recommended_risk_set
   if (![-1, 0, 1].includes(Number(action))) errors.push('reviewer core action must be -1, 0, or 1')

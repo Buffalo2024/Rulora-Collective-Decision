@@ -15,9 +15,17 @@
         <h1>产业链信用风险控制台</h1>
         <p class="subtitle">选择目标企业，批量自动进件，查看阶段门禁、Agent执行状态、结构化结论与完整运行日志。</p>
       </div>
-      <div class="system-pill" id="system-health" aria-live="polite">
-        <span class="pulse neutral"></span>
-        <span>正在读取系统状态</span>
+      <div class="topbar-controls">
+        <label class="privacy-toggle" for="presentation-privacy-toggle">
+          <input type="checkbox" id="presentation-privacy-toggle" role="switch" aria-describedby="presentation-privacy-note">
+          <span class="privacy-toggle-track" aria-hidden="true"><span></span></span>
+          <span>路演脱敏</span>
+        </label>
+        <span class="privacy-mode-badge" id="presentation-privacy-badge" hidden>演示脱敏模式</span>
+        <div class="system-pill" id="system-health" aria-live="polite">
+          <span class="pulse neutral"></span>
+          <span>正在读取系统状态</span>
+        </div>
       </div>
     </header>
 
@@ -31,17 +39,32 @@
             </div>
             <span class="local-badge">仅本机</span>
           </div>
+          <details class="import-box">
+            <summary><span class="import-summary-icon">＋</span><span><strong>导入新企业</strong><small>单家填写或批量导入</small></span><span class="summary-arrow">⌄</span></summary>
+            <div class="import-intro">填写四项必要信息，系统自动分配企业编号，导入后即可进件。</div>
+            <form id="company-import-form">
+              <label for="import-company-name">企业名称</label><input type="text" id="import-company-name" required>
+              <label for="import-taxpayer-id">纳税人识别号</label><input type="text" id="import-taxpayer-id" required>
+              <label for="import-industry">所属行业</label><input type="text" id="import-industry" placeholder="例如：电子设备制造" required>
+              <label for="import-business-scope">经营范围</label><textarea id="import-business-scope" placeholder="填写工商登记中的主要经营范围" required></textarea>
+              <button type="submit" class="secondary-button" id="import-record-button">导入并加入企业列表</button>
+            </form>
+            <div class="file-import-divider"><span>批量导入</span></div>
+            <div class="file-upload-card"><label class="file-picker" for="company-file"><span class="file-picker-icon">↑</span><span><strong>选择企业信息文件</strong><small id="company-file-name">支持 CSV、Excel、JSON</small></span></label><input type="file" id="company-file" accept=".json,.csv,.xls,.xlsx"><button type="button" class="ghost-button import-file-button" id="import-button">开始导入</button></div>
+            <a class="template-link" href="/api/companies/template">↓ 下载企业信息模板</a><p class="form-message" id="import-message" role="status"></p>
+          </details>
           <form id="intake-form">
             <div class="selection-heading">
               <label for="company-search">勾选目标企业</label>
               <span id="selection-count">已选 0 / 5</span>
             </div>
             <input type="search" id="company-search" placeholder="搜索编号、企业名称或行业">
+            <span class="visually-hidden" id="presentation-privacy-note">仅替换当前页面可见身份信息，不修改后台数据或模型输入。</span>
             <div class="company-checklist" id="company-checklist" role="group" aria-label="目标企业多选">
               <p class="empty-state">正在载入企业…</p>
             </div>
             <div class="batch-notice" id="batch-notice">单次最多进件5家；系统按安全并发运行，其余自动排队。</div>
-            <p class="field-hint">点击“开始进件分析”即授权本次所选企业进入完整分析流程；后续Action、Risk、Reviewer、报告及断点恢复不再重复确认。</p>
+            <p class="field-hint">点击“开始进件分析”后，系统依次完成授信方向分析、风控措施分析、复核、报告与断点记录。</p>
             <button type="submit" class="primary-button" id="submit-button">
               <span>开始进件并分析</span>
               <span aria-hidden="true">→</span>
@@ -58,7 +81,7 @@
             </div>
             <span class="local-badge">可配置</span>
           </div>
-          <p class="field-hint">默认只显示真实自动接通来源。可添加SearXNG限域网站或公开免鉴权JSON API；不绕过登录、验证码或WAF。</p>
+          <p class="field-hint">系统已预设常用公开来源，并区分自动接通与待授权接入。也可补充自定义公开网站或JSON API。</p>
           <div id="built-in-sources" class="source-list"><p class="empty-state">正在读取来源…</p></div>
           <details class="source-settings">
             <summary>配置开源检索与来源网站</summary>
@@ -159,48 +182,48 @@
           <div class="pipeline" id="pipeline">
             <article class="pipeline-step" data-step="evidence">
               <span class="step-number">1</span>
-              <div><h3>Evidence Collection</h3><p>产业链规划、公开证据与监控</p></div>
+              <div><h3>证据准备</h3><p>产业链规划、公开证据与监控</p></div>
               <span class="step-state">等待</span>
             </article>
             <article class="pipeline-step" data-step="action-decision">
               <span class="step-number">2</span>
-              <div><h3>Action Decision</h3><p>三席独立判断、广播与一次修订</p></div>
+              <div><h3>授信方向分析</h3><p>三席独立判断、广播与一次修订</p></div>
               <span class="step-state">等待</span>
             </article>
             <article class="pipeline-step" data-step="action-calibration">
               <span class="step-number">3</span>
-              <div><h3>Action Calibration</h3><p>Program授信门槛与Action冻结</p></div>
+              <div><h3>授信方向确定</h3><p>程序检查门槛并冻结方向</p></div>
               <span class="step-state">等待</span>
             </article>
             <article class="pipeline-step" data-step="risk-decision">
               <span class="step-number">4</span>
-              <div><h3>Risk Decision</h3><p>三席基于冻结Action生成完整集合</p></div>
+              <div><h3>风控措施分析</h3><p>三席基于已定方向提出完整方案</p></div>
               <span class="step-state">等待</span>
             </article>
             <article class="pipeline-step" data-step="risk-calibration">
               <span class="step-number">5</span>
-              <div><h3>Risk Calibration</h3><p>exact-set候选池，禁止标签并集</p></div>
+              <div><h3>完整方案冻结</h3><p>保留各席完整方案，不拼装措施</p></div>
               <span class="step-state">等待</span>
             </article>
             <article class="pipeline-step" data-step="reviewer">
               <span class="step-number">6</span>
-              <div><h3>Reviewer Selection</h3><p>只选择冻结候选ID，不创造答案</p></div>
+              <div><h3>最终复核</h3><p>只校对或选择已有完整方案</p></div>
               <span class="step-state">等待</span>
             </article>
             <article class="pipeline-step" data-step="champion-gate">
               <span class="step-number">7</span>
-              <div><h3>Champion Gate</h3><p>KEEP / REVIEW / CHALLENGE程序门禁</p></div>
+              <div><h3>交付门禁</h3><p>按宿主规则确认、复查或质疑</p></div>
               <span class="step-state">等待</span>
             </article>
             <article class="pipeline-step" data-step="finalization">
               <span class="step-number">8</span>
-              <div><h3>Finalization</h3><p>Core结论、Audit告警、QA与产物落盘</p></div>
+              <div><h3>结果交付</h3><p>核心结论、运行提示、质量检查与保存</p></div>
               <span class="step-state">等待</span>
             </article>
           </div>
           <div class="runtime-diagnostics" id="runtime-diagnostics">
-            <div><span>Constraint Check</span><strong>等待</strong><small>Attempt 0/3</small></div>
-            <div><span>Output Recovery</span><strong>未触发</strong><small>确定性规范化</small></div>
+            <div><span>约束检查</span><strong>等待</strong><small>第 0/3 次</small></div>
+            <div><span>格式恢复</span><strong>未触发</strong><small>仅修复输出格式</small></div>
           </div>
         </section>
 
@@ -244,6 +267,17 @@
       </div>
     </main>
   </div>
+  <dialog id="exception-dialog" class="exception-dialog">
+    <div class="exception-dialog-head"><span>!</span><div><h2>任务需要确认</h2><p id="exception-company"></p></div></div>
+    <div class="exception-dialog-body">
+      <strong id="exception-title">任务未完成</strong><p id="exception-message"></p><p class="exception-guidance" id="exception-guidance"></p>
+      <div class="exception-chat" id="exception-chat" aria-live="polite"></div>
+      <div class="exception-quick-actions" id="exception-default-actions"><button type="button" data-exception-command="请从断点继续">从断点继续</button><button type="button" data-exception-command="请解释失败原因">解释原因</button><button type="button" data-exception-command="暂不处理">暂不处理</button></div><div class="exception-quick-actions" id="exception-action-resolution" hidden><button type="button" data-action-resolution="tighten">人工裁决：收紧授信</button><button type="button" data-action-resolution="maintain">人工裁决：维持授信</button><button type="button" data-action-resolution="increase">人工裁决：增加授信</button><button type="button" data-action-resolution="reanalyze">重新进行三席分析</button></div>
+      <form id="exception-command-form" class="exception-command-form"><label for="exception-command">向运行协调Agent下达指令</label><div><input id="exception-command" type="text" placeholder="例如：从断点继续，或解释为什么失败" autocomplete="off"><button type="submit">发送</button></div></form>
+    </div>
+    <form method="dialog" class="exception-close-form"><button type="submit" class="ghost-button" id="exception-confirm">关闭对话</button></form>
+  </dialog>
+  <script src="/presentation-privacy.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>

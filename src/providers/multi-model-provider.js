@@ -88,7 +88,8 @@ const COMPETITION_JOINT_OUTPUT_INSTRUCTION = [
 ].join('\n')
 
 const COMPETITION_CALIBRATION_OUTPUT_INSTRUCTION = [
-  '只返回一个JSON对象，不要Markdown代码块或解释。',
+  '响应的第一个字符必须是{，最后一个字符必须是}；只返回一个JSON对象。',
+  '禁止输出分析过程、思考过程、开场白、Markdown代码块或JSON之外的任何文字。',
   '你只能从Program提供的冻结候选池中选择，不得重新输出Action或Risk真实值。',
   '必填字段：selected_action_candidate_id、selected_risk_candidate_id、challenge_intent、evidence_strength。',
   'selected_action_candidate_id和selected_risk_candidate_id必须原样取自输入候选池；challenge_intent必须是boolean。',

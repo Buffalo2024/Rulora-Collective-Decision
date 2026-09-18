@@ -46,5 +46,12 @@ npm run web
 
 Public-source connectors are disabled by default. The included company case is fictional.
 
+The local console includes 25 fictional demo companies, validated company import, progress views,
+an exception dialogue, and a presentation-only privacy toggle. Each job owns an isolated model-call
+checkpoint directory and can resume in place after failure or local-server restart without rerunning
+successful nodes. If the three seats cannot freeze an Action direction, the workflow pauses before Risk
+analysis and requires explicit human adjudication or a fresh three-seat analysis. Presentation privacy
+changes visible browser labels only; it never changes backend records, model input, or delivery artifacts.
+
 Contact: `zzjeff1993.agent@gmail.com`. The repository also includes a WeChat QR code at
 `assets/contact/wechat-qr.jpg`; please mention `Collective Decision`. License: Apache-2.0.

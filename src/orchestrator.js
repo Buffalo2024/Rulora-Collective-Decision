@@ -36,7 +36,7 @@ const { assertSchema, loadSchemaValidators } = require('./schema-validator')
 const { nowId, readJson, safeId, sha256, writeJsonAtomic } = require('./utils')
 const { normalizeGdeltArticleUrl } = require('./sources/gdelt-adapter')
 
-async function runCase({ inputPath, outputDirectory, allowFixture = false, allowBaseline = false, task = null, onProgress = null, mode = 'business', champion = null, reuseFrozenEvidence = false, evidenceChanged = false }) {
+async function runCase({ inputPath, outputDirectory, allowFixture = false, allowBaseline = false, task = null, onProgress = null, mode = 'business', champion = null, reuseFrozenEvidence = false, evidenceChanged = false, modelCallCheckpointRoot = null, manualActionDirection = null }) {
   const root = projectRoot()
   const decisionMode = normalizeMode(mode)
   const calibratedCompetition = isCalibratedCompetition(decisionMode)
@@ -137,7 +137,7 @@ async function runCase({ inputPath, outputDirectory, allowFixture = false, allow
   const { core, source: ruloraSource } = loadRulora()
   const checkpointConfig = executionConfig.model_call_checkpoints || {}
   const modelCallCheckpoints = new ModelCallCheckpointStore({
-    rootDirectory: path.resolve(root, process.env.MODEL_CALL_CHECKPOINT_ROOT || checkpointConfig.root_directory || '.runtime/model-call-checkpoints'),
+    rootDirectory: path.resolve(modelCallCheckpointRoot || process.env.MODEL_CALL_CHECKPOINT_ROOT || path.join(root, checkpointConfig.root_directory || '.runtime/model-call-checkpoints')),
     enabled: productionMode && checkpointConfig.enabled_in_production === true,
     lockTimeoutMs: checkpointConfig.lock_timeout_ms || 900000
   })
@@ -282,7 +282,8 @@ async function runCase({ inputPath, outputDirectory, allowFixture = false, allow
         champion,
         modelCallCheckpoints,
         executionFingerprint,
-        onProgress: emitProgress
+        onProgress: emitProgress,
+        manualActionDirection
       })
       const eligibleShadowChallengers = calibratedCompetition ? [] : shadowChallengers
       const shadow = await withGroupProgress({
@@ -507,6 +508,7 @@ async function runCase({ inputPath, outputDirectory, allowFixture = false, allow
 
 function classifyExecutionFailure(error) {
   if (findErrorCause(error, item => item.code === PAUSED_SEAT_FAILURE)) return PAUSED_SEAT_FAILURE
+  if (findErrorCause(error, item => item.code === 'ACTION_UNRESOLVED')) return 'PAUSED_ACTION_UNRESOLVED'
   if (findErrorCause(error, item => item.is_model_transport_failure === true && item.retryable === true && (
     [502, 503, 504].includes(Number(item.http_status)) ||
     ['MODEL_API_TIMEOUT', 'MODEL_API_NETWORK_FAILURE', 'ECONNRESET', 'ETIMEDOUT'].includes(item.code) ||
@@ -578,7 +580,7 @@ async function persistCaseExecutionCheckpoint({ root, caseData, decisionMode, cu
   return checkpointPath
 }
 
-async function createIndustryPlan({ caseData, allowFixture = false, allowBaseline = false }) {
+async function createIndustryPlan({ caseData, allowFixture = false, allowBaseline = false, modelCallCheckpointRoot = null }) {
   const root = projectRoot()
   const [agentsConfig, executionConfig, schemas] = await Promise.all([
     readJson(path.join(root, 'config', 'agents.json')),
@@ -607,7 +609,7 @@ async function createIndustryPlan({ caseData, allowFixture = false, allowBaselin
   const { core } = loadRulora()
   const checkpointConfig = executionConfig.model_call_checkpoints || {}
   const modelCallCheckpoints = new ModelCallCheckpointStore({
-    rootDirectory: path.resolve(root, process.env.MODEL_CALL_CHECKPOINT_ROOT || checkpointConfig.root_directory || '.runtime/model-call-checkpoints'),
+    rootDirectory: path.resolve(modelCallCheckpointRoot || process.env.MODEL_CALL_CHECKPOINT_ROOT || path.join(root, checkpointConfig.root_directory || '.runtime/model-call-checkpoints')),
     enabled: !allowFixture && !allowBaseline && checkpointConfig.enabled_in_production === true,
     lockTimeoutMs: checkpointConfig.lock_timeout_ms || 900000
   })
@@ -919,9 +921,31 @@ async function runTwoStageDebate(args) {
     frozenDirection: null,
     stageDecisionSchema: calibratedCompetition ? args.competitionActionDecisionSchema : args.stageDecisionSchema
   })
-  const actionCalibration = calibratedCompetition
+  let actionCalibration = calibratedCompetition
     ? calibrateActionCandidate({ initialDecisions: direction.initial_decisions, finalDecisions: direction.final_decisions })
     : null
+  if (calibratedCompetition && !actionCalibration?.calibrated_direction && args.manualActionDirection) {
+    const selected = String(args.manualActionDirection)
+    if (!['risk_up', 'risk_flat', 'risk_down'].includes(selected)) throw new Error('人工裁决的授信方向无效。')
+    const actionMap = { risk_up: -1, risk_flat: 0, risk_down: 1 }
+    actionCalibration = {
+      ...actionCalibration,
+      proposed_direction: selected,
+      proposed_action: String(actionMap[selected]),
+      calibrated_direction: selected,
+      calibrated_action: String(actionMap[selected]),
+      threshold_passed: true,
+      manual_adjudication: {
+        applied: true,
+        direction: selected,
+        action: String(actionMap[selected]),
+        source: 'human_operator',
+        reason: 'three_seat_action_unresolved',
+        recorded_at: new Date().toISOString()
+      }
+    }
+    await notifyProgress(args.onProgress, { type: 'manual_action_adjudicated', stage: 'group_debate', phase: 'credit_direction', result: selected, action: actionMap[selected] })
+  }
   const directionOutcome = calibratedCompetition
     ? {
         value: actionCalibration.calibrated_direction,
@@ -947,6 +971,12 @@ async function runTwoStageDebate(args) {
     action: actionCalibration?.calibrated_action ?? null,
     threshold_passed: actionCalibration?.threshold_passed ?? null
   })
+  if (calibratedCompetition && !actionCalibration?.calibrated_direction) {
+    const error = new Error('三席授信方向未形成可冻结结论，程序已在风控措施阶段前暂停。')
+    error.code = 'ACTION_UNRESOLVED'
+    error.action_candidates = structuredClone(actionCalibration?.support?.candidates || [])
+    throw error
+  }
   await notifyProgress(args.onProgress, { type: 'phase_started', stage: 'group_debate', phase: 'risk_control_advice_initial' })
   const adviceRuns = await allSettledOrThrow(args.agents.map(agent => decideStageOne({
     ...args,

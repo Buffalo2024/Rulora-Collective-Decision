@@ -47,7 +47,7 @@ const COMPANY_HEADER_MAP = Object.freeze({
   '经营范围': 'business_scope'
 })
 
-async function parseCompanyImport({ filename, contentBase64 }) {
+async function parseCompanyImport({ filename, contentBase64, allowMissingCompanyId = false }) {
   const safeFilename = path.basename(String(filename || ''))
   const extension = path.extname(safeFilename).toLowerCase()
   if (!['.json', '.csv', '.xls', '.xlsx'].includes(extension)) throw inputError('仅支持 JSON、CSV、XLS、XLSX 企业文件。')
@@ -65,7 +65,7 @@ async function parseCompanyImport({ filename, contentBase64 }) {
   } else {
     rawRecords = await spreadsheetRecords({ filename: safeFilename, bytes })
   }
-  const records = normalizeImportedRecords(rawRecords)
+  const records = normalizeImportedRecords(rawRecords, { allowMissingCompanyId })
   return {
     filename: safeFilename,
     content_sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
@@ -166,7 +166,7 @@ function normalizeHeader(value) {
   return COMPANY_HEADER_MAP[clean] || clean
 }
 
-function normalizeImportedRecords(rawRecords) {
+function normalizeImportedRecords(rawRecords, { allowMissingCompanyId = false } = {}) {
   if (!Array.isArray(rawRecords) || rawRecords.length === 0) throw inputError('企业文件没有records或有效数据行。')
   if (rawRecords.length > MAXIMUM_IMPORT_RECORDS) throw inputError(`单个企业文件最多包含${MAXIMUM_IMPORT_RECORDS}家企业。`)
   const seen = new Set()
@@ -179,13 +179,34 @@ function normalizeImportedRecords(rawRecords) {
       normalized[key] = cleanCell(rawValue, key === 'business_scope' ? 20_000 : 2_000)
     }
     const numericId = String(normalized.company_id || '').trim()
-    if (!/^\d{1,3}$/.test(numericId)) throw inputError(`第${index + 1}条company_id必须是1至3位数字。`)
-    normalized.company_id = numericId.padStart(3, '0')
-    if (!normalized.company_name) throw inputError(`企业${normalized.company_id}缺少company_name。`)
-    if (!normalized.industry) throw inputError(`企业${normalized.company_id}缺少industry。`)
-    if (seen.has(normalized.company_id)) throw inputError(`企业文件包含重复company_id：${normalized.company_id}`)
-    seen.add(normalized.company_id)
+    if (numericId && !/^\d{1,3}$/.test(numericId)) throw inputError(`第${index + 1}条企业编号必须是1至3位数字。`)
+    if (!numericId && !allowMissingCompanyId) throw inputError(`第${index + 1}条记录缺少企业编号。`)
+    normalized.company_id = numericId ? numericId.padStart(3, '0') : ''
+    const label = normalized.company_id || `第${index + 1}条企业`
+    if (!normalized.company_name) throw inputError(`${label}缺少企业名称。`)
+    if (!normalized.taxpayer_id && normalized.unified_social_credit_code) normalized.taxpayer_id = normalized.unified_social_credit_code
+    if (!normalized.unified_social_credit_code && normalized.taxpayer_id) normalized.unified_social_credit_code = normalized.taxpayer_id
+    if (!normalized.taxpayer_id) throw inputError(`${label}缺少纳税人识别号。`)
+    if (!normalized.industry) throw inputError(`${label}缺少所属行业。`)
+    if (!normalized.business_scope) throw inputError(`${label}缺少经营范围。`)
+    if (normalized.company_id && seen.has(normalized.company_id)) throw inputError(`企业文件包含重复企业编号：${normalized.company_id}`)
+    if (normalized.company_id) seen.add(normalized.company_id)
     return Object.fromEntries(COMPANY_COLUMNS.filter(key => normalized[key] !== undefined).map(key => [key, normalized[key]]))
+  })
+}
+
+function assignCompanyIds(records, existingCompanyIds = []) {
+  const used = new Set(existingCompanyIds.map(value => String(value).padStart(3, '0')))
+  for (const record of records) if (record.company_id) used.add(record.company_id)
+  return records.map(record => {
+    if (record.company_id) return record
+    let assigned = null
+    for (let value = 1; value <= 999; value += 1) {
+      const candidate = String(value).padStart(3, '0')
+      if (!used.has(candidate)) { assigned = candidate; used.add(candidate); break }
+    }
+    if (!assigned) throw inputError('企业编号已用完，无法自动分配新编号。')
+    return { ...record, company_id: assigned }
   })
 }
 
@@ -219,6 +240,7 @@ function inputError(message) {
 module.exports = {
   COMPANY_COLUMNS,
   MAXIMUM_IMPORT_BYTES,
+  assignCompanyIds,
   companyTemplateCsv,
   normalizeImportedRecords,
   parseCompanyImport,

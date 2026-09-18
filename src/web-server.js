@@ -96,6 +96,17 @@ async function handleApi({ request, response, url, manager, root }) {
     sendJson(response, 202, { batch: await manager.createBatch(body) })
     return
   }
+  const actionResolutionMatch = url.pathname.match(/^\/api\/jobs\/([A-Za-z0-9._-]+)\/action-resolution$/)
+  if (request.method === 'POST' && actionResolutionMatch) {
+    const body = await readJsonBody(request)
+    sendJson(response, 202, { job: await manager.resolveActionDisagreement(actionResolutionMatch[1], body) })
+    return
+  }
+  const resumeMatch = url.pathname.match(/^\/api\/jobs\/([A-Za-z0-9._-]+)\/resume$/)
+  if (request.method === 'POST' && resumeMatch) {
+    sendJson(response, 202, { job: await manager.resumeJob(resumeMatch[1]) })
+    return
+  }
   if (request.method === 'GET' && url.pathname === '/api/system') {
     sendJson(response, 200, { system: manager.systemSnapshot(), providers: await providerSnapshot(root) })
     return
@@ -171,7 +182,7 @@ async function providerSnapshot(root) {
 
 async function serveStatic({ response, pathname, staticRoot }) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1)
-  if (!['index.html', 'app.js', 'styles.css'].includes(relative)) {
+  if (!['index.html', 'app.js', 'presentation-privacy.js', 'styles.css'].includes(relative)) {
     response.statusCode = 404
     response.end('Not found')
     return

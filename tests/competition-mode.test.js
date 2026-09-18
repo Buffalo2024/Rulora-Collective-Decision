@@ -288,7 +288,7 @@ test('v2 adapters keep Action and Risk contracts separate and reject an unselect
   })
 })
 
-test('reviewer requests for reanalysis, rebroadcast, or recollection are rejected and cannot open a loop', () => {
+test('reviewer request fields are structurally rejected and cannot open a loop', () => {
   const pool = buildExactSetCandidatePool({ initialDecisions: SEATS.map(id => advice(id, ['3'])), finalDecisions: SEATS.map(id => advice(id, ['3'])) })
   const action = calibrateActionCandidate({ initialDecisions: SEATS.map(id => direction(id, 'risk_flat')), finalDecisions: SEATS.map(id => direction(id, 'risk_flat')) })
   const review = validReview(pool, action, null)
@@ -299,6 +299,16 @@ test('reviewer requests for reanalysis, rebroadcast, or recollection are rejecte
   const budget = new CompetitionCallBudget()
   budget.consume('calibration_reviewer')
   assert.throws(() => budget.consume('calibration_reviewer'), error => error.code === 'COMPETITION_BUDGET_EXCEEDED')
+})
+
+test('reviewer prose is audit text and is never interpreted by the Program gate', () => {
+  const pool = buildExactSetCandidatePool({ initialDecisions: SEATS.map(id => advice(id, ['3'])), finalDecisions: SEATS.map(id => advice(id, ['3'])) })
+  const action = calibrateActionCandidate({ initialDecisions: SEATS.map(id => direction(id, 'risk_flat')), finalDecisions: SEATS.map(id => direction(id, 'risk_flat')) })
+  const review = validReview(pool, action, null)
+  review.reason = ['建议重新分析。', '本次不触发重新广播。']
+  const errors = validateCalibrationReview(review, { candidatePool: pool, actionCalibration: action })
+  assert.equal(errors.some(error => error.includes('forbidden')), false)
+  assert.equal(errors.length, 0)
 })
 
 test('independent support is not inflated by broadcast following', () => {

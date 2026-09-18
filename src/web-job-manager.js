@@ -3,7 +3,7 @@ const fs = require('node:fs/promises')
 const path = require('node:path')
 const { buildCollectionRequest } = require('./batch-runner')
 const { buildCompanyCase } = require('./case-builder')
-const { parseCompanyImport } = require('./company-import')
+const { assignCompanyIds, parseCompanyImport } = require('./company-import')
 const { applyIndustryPlanToCollectionRequest, createIndustryPlan, runCase } = require('./orchestrator')
 const { projectRoot } = require('./rulora-loader')
 const { RISK_CONTROL_ADVICE_DEFINITION_VERSION, describeRiskControlAdvice } = require('./risk-control-advice')
@@ -64,11 +64,13 @@ class WebJobManager {
     this.logsDirectory = path.join(this.runtimeDirectory, 'logs')
     this.outputsDirectory = path.join(this.runtimeDirectory, 'outputs')
     this.intakeDirectory = path.join(this.runtimeDirectory, 'intake')
+    this.demoCasesDirectory = path.join(this.runtimeDirectory, 'demo-cases')
     this.importCatalogPath = path.join(this.runtimeDirectory, 'imported-companies.json')
     this.sourceConfigStore = new UserSourceConfigStore({ filePath: path.join(this.runtimeDirectory, 'user-public-sources.json') })
     this.jobs = new Map()
     this.active = new Set()
     this.writeChains = new Map()
+    this.resumeInFlight = new Set()
     this.companies = []
     this.baseCompanies = []
     this.importedCompanyIds = new Set()
@@ -85,7 +87,8 @@ class WebJobManager {
       fs.mkdir(this.jobsDirectory, { recursive: true }),
       fs.mkdir(this.logsDirectory, { recursive: true }),
       fs.mkdir(this.outputsDirectory, { recursive: true }),
-      fs.mkdir(this.intakeDirectory, { recursive: true })
+      fs.mkdir(this.intakeDirectory, { recursive: true }),
+      fs.mkdir(this.demoCasesDirectory, { recursive: true })
     ])
     const [companyData, agentConfig, sourceConfig, userSourceConfig] = await Promise.all([
       readJson(path.join(this.root, 'examples', 'companies.json')),
@@ -93,11 +96,10 @@ class WebJobManager {
       readJson(path.join(this.root, 'config', 'public-sources.json')),
       this.sourceConfigStore.load()
     ])
-    this.builtInSources = (sourceConfig.sources || []).filter(source => source.production_ingest_enabled === true && Boolean(source.adapter)).map(source => ({
-      id: source.id, label: source.label, source_type: source.source_type, access_mode: source.access_mode, automatic: true
-    }))
+    this.builtInSources = (sourceConfig.sources || []).map(source => ({ id: source.id, label: source.label, source_type: source.source_type, access_mode: source.access_mode || 'manual', automatic: source.production_ingest_enabled === true && Boolean(source.adapter), configured: Boolean(source.adapter || source.manual_import_enabled || source.base_url), claims: Array.isArray(source.claims) ? source.claims.slice(0, 3) : [] }))
     this.userSourceConfig = userSourceConfig
     this.baseCompanies = normalizeCompanyRecords(companyData)
+    await this.materializeDemoCases()
     const imported = await this.loadImportedCompanies()
     this.importedCompanyIds = new Set(imported.map(item => item.company_id))
     this.companies = mergeCompanyRecords(this.baseCompanies, imported)
@@ -120,7 +122,7 @@ class WebJobManager {
           job.phase = null
           job.active_agents = []
           job.updated_at = new Date().toISOString()
-          job.failure = { code: 'WEB_SERVER_RESTARTED', message: '本地Web服务重启，旧任务未自动续跑。请重新提交任务。' }
+          job.failure = { code: 'WEB_SERVER_RESTARTED', message: '本地Web服务重启，任务已停在原断点。可确认后从断点继续。' }
           await writeJsonAtomic(path.join(this.jobsDirectory, entry.name), job)
         }
         this.jobs.set(job.job_id, job)
@@ -135,14 +137,19 @@ class WebJobManager {
   async refreshCaseCatalog() {
     this.caseCatalog = await discoverCases(this.root, this.companies.map(item => item.company_id))
     for (const company of this.companies) {
-      const candidate = path.join(this.intakeDirectory, company.company_id, 'case.json')
-      try {
-        const stat = await fs.stat(candidate)
-        const current = this.caseCatalog.get(company.company_id)
-        if (!current || stat.mtimeMs > Date.parse(current.updated_at)) {
-          this.caseCatalog.set(company.company_id, { case_path: candidate, updated_at: stat.mtime.toISOString(), mtime: stat.mtimeMs })
-        }
-      } catch (error) { if (error.code !== 'ENOENT') throw error }
+      const candidates = [
+        path.join(this.demoCasesDirectory, company.company_id, 'case.json'),
+        path.join(this.intakeDirectory, company.company_id, 'case.json')
+      ]
+      for (const candidate of candidates) {
+        try {
+          const stat = await fs.stat(candidate)
+          const current = this.caseCatalog.get(company.company_id)
+          if (!current || stat.mtimeMs > Date.parse(current.updated_at)) {
+            this.caseCatalog.set(company.company_id, { case_path: candidate, updated_at: stat.mtime.toISOString(), mtime: stat.mtimeMs })
+          }
+        } catch (error) { if (error.code !== 'ENOENT') throw error }
+      }
     }
     return this.caseCatalog
   }
@@ -157,9 +164,29 @@ class WebJobManager {
     }
   }
 
+  async materializeDemoCases() {
+    const template = await readJson(path.join(this.root, 'examples', 'company-case.json'))
+    for (const company of this.baseCompanies) {
+      const caseData = structuredClone(template)
+      caseData.case_id = `demo-company-${company.company_id}`
+      caseData.company = {
+        ...caseData.company,
+        id: company.company_id,
+        company_id: company.company_id,
+        name: company.company_name,
+        industry: company.industry,
+        region: [company.province, company.city].filter(Boolean).join('') || '示例地区'
+      }
+      const directory = path.join(this.demoCasesDirectory, company.company_id)
+      await fs.mkdir(directory, { recursive: true })
+      await writeJsonAtomic(path.join(directory, 'case.json'), caseData)
+    }
+  }
+
   async importCompanies({ filename, content_base64: contentBase64 }) {
     await this.initialize()
-    const parsed = await parseCompanyImport({ filename, contentBase64 })
+    const parsed = await parseCompanyImport({ filename, contentBase64, allowMissingCompanyId: true })
+    parsed.records = assignCompanyIds(parsed.records, this.companies.map(company => company.company_id))
     const existing = new Map(this.companies.map(company => [company.company_id, company]))
     for (const record of parsed.records) {
       const current = existing.get(record.company_id)
@@ -223,7 +250,7 @@ class WebJobManager {
       search_backend: structuredClone(this.userSourceConfig?.search_backend || { type: 'searxng', enabled: false, endpoint: '' }),
       websites: structuredClone(this.userSourceConfig?.websites || []),
       notes: [
-        '默认列表只包含当前真实自动接通的公开来源。',
+        '默认列表同时显示自动接通来源和系统已预设的待接入来源。',
         '自定义网站通过用户自托管SearXNG发现公开页面；正文仍由本系统抓取、校验发布日期并固化快照。',
         '公开JSON API可配置查询参数和字段路径；当前仅允许无需密钥的HTTPS GET接口。',
         '不绕过登录、验证码、WAF或网站访问控制。'
@@ -322,6 +349,7 @@ class WebJobManager {
       case_updated_at: caseRecord?.updated_at || null,
       intake_required: !caseRecord,
       output_directory: outputDirectory,
+      model_call_checkpoint_root: path.join(outputDirectory, 'model-call-checkpoints'),
       log_path: path.join(this.logsDirectory, `${jobId}.log`),
       status: 'queued',
       stage: 'queued',
@@ -345,6 +373,82 @@ class WebJobManager {
     await fs.appendFile(job.log_path, `${now} [queued] 已自动进件：${company.company_id} · ${company.company_name}\n`, 'utf8')
     if (!deferPump) this.pump()
     return publicJob(job)
+  }
+
+  checkpointRootForJob(job) {
+    // New UI jobs own an isolated checkpoint directory. Historical jobs used the
+    // runtime-wide store, so retain that fallback to make their completed calls reusable.
+    return job.model_call_checkpoint_root || path.join(this.root, '.runtime', 'model-call-checkpoints')
+  }
+
+  async resumeJob(jobId) {
+    await this.initialize()
+    if (this.resumeInFlight.has(jobId) || this.active.has(jobId)) throw badRequest('该任务正在恢复或运行，请勿重复提交。')
+    this.resumeInFlight.add(jobId)
+    try {
+      const existing = this.jobs.get(jobId)
+      if (!existing) throw notFound(`任务不存在：${jobId}`)
+      if (!['failed', 'paused', 'interrupted'].includes(existing.status)) {
+        throw badRequest('只有失败、暂停或中断的任务可以从断点继续。')
+      }
+      if (existing.user_consent !== true || existing.consent_action !== 'start_analysis') {
+        throw badRequest('原任务缺少“开始进件分析”授权，不能恢复。')
+      }
+      await this.mutateJob(jobId, async job => {
+        if (!['failed', 'paused', 'interrupted'].includes(job.status)) throw badRequest('任务状态已变化，请刷新后再操作。')
+        const now = new Date().toISOString()
+        job.status = 'queued'
+        job.stage = 'queued'
+        job.phase = 'queued'
+        job.active_agents = []
+        job.failure = null
+        job.completed_at = null
+        job.resume_count = Number(job.resume_count || 0) + 1
+        job.resumed_at = now
+        job.model_call_checkpoint_root ||= this.checkpointRootForJob(job)
+        for (const state of Object.values(job.agent_states || {})) {
+          if (state.status === 'failed' || state.status === 'running') {
+            state.status = 'idle'
+            state.error_code = null
+            state.started_at = null
+            state.completed_at = null
+          }
+        }
+        await this.appendLog(job, '[resume] 用户确认从断点继续；已完成节点保持不变，仅执行失败和未完成节点。')
+      })
+      this.pump()
+      return publicJob(this.jobs.get(jobId))
+    } finally {
+      this.resumeInFlight.delete(jobId)
+    }
+  }
+
+  async resolveActionDisagreement(jobId, { mode, direction = null } = {}) {
+    await this.initialize()
+    const existing = this.jobs.get(jobId)
+    if (!existing) throw notFound(`任务不存在：${jobId}`)
+    if (existing.failure?.code !== 'PAUSED_ACTION_UNRESOLVED') throw badRequest('当前任务不是需要人工处理的授信方向分歧。')
+    if (mode === 'reanalyze') {
+      await fs.rm(this.checkpointRootForJob(existing), { recursive: true, force: true })
+      await this.mutateJob(jobId, async job => {
+        job.manual_action_direction = null
+        job.manual_action_resolution = { mode: 'reanalyze', recorded_at: new Date().toISOString() }
+        job.events = []
+        job.v2_state = createV2State()
+        for (const state of Object.values(job.agent_states || {})) if (state.participates_in_debate) Object.assign(state, { status: 'idle', phase: null, operation: null, started_at: null, completed_at: null, error_code: null })
+        await this.appendLog(job, '[human] 用户确认重新进行三席独立分析；旧日志保留，模型调用缓存已清除。')
+      })
+      return this.resumeJob(jobId)
+    }
+    const mapping = { tighten: 'risk_up', maintain: 'risk_flat', increase: 'risk_down', risk_up: 'risk_up', risk_flat: 'risk_flat', risk_down: 'risk_down' }
+    const selected = mapping[String(direction || '')]
+    if (mode !== 'adjudicate' || !selected) throw badRequest('请选择有效的人工授信方向。')
+    await this.mutateJob(jobId, async job => {
+      job.manual_action_direction = selected
+      job.manual_action_resolution = { mode: 'adjudicate', direction: selected, recorded_at: new Date().toISOString() }
+      await this.appendLog(job, `[human] 三席方向未收敛，用户人工裁决授信方向=${selected}；三席原意见保持不变。`)
+    })
+    return this.resumeJob(jobId)
   }
 
   async getArtifact(jobId, kind) {
@@ -394,7 +498,7 @@ class WebJobManager {
       job.phase = 'session_initialization'
       job.progress_percent = PHASE_PROGRESS.session_initialization
       job.started_at = startedAt
-      await this.appendLog(job, '[running] 开始执行真实多Agent分析。')
+      await this.appendLog(job, `[running] 开始执行多Agent分析；${job.intake_required ? '先采集公开证据' : '复用冻结证据'}，本次重新调用LLM。`)
     })
     try {
       let job = this.jobs.get(jobId)
@@ -407,8 +511,10 @@ class WebJobManager {
         outputDirectory: job.output_directory,
         task: job.task,
         mode: 'competition_calibrated_v2',
-        reuseFrozenEvidence: true,
-        onProgress: event => this.recordProgress(jobId, event)
+        reuseFrozenEvidence: job.intake_required !== true,
+        modelCallCheckpointRoot: this.checkpointRootForJob(job),
+        onProgress: event => this.recordProgress(jobId, event),
+        manualActionDirection: job.manual_action_direction || null
       })
       await this.mutateJob(jobId, async current => {
         current.status = 'succeeded'
@@ -423,7 +529,7 @@ class WebJobManager {
       })
     } catch (error) {
       await this.mutateJob(jobId, async job => {
-        job.status = error.code === 'PAUSED_SEAT_FAILURE' ? 'paused' : 'failed'
+        job.status = String(error.code || '').startsWith('PAUSED_') ? 'paused' : 'failed'
         job.active_agents = []
         job.completed_at = new Date().toISOString()
         job.failure = { code: error.code || 'RUN_FAILED', message: String(error.message || error) }
@@ -454,7 +560,7 @@ class WebJobManager {
     })
     let planning
     try {
-      planning = await createIndustryPlan({ caseData: planningCase })
+      planning = await createIndustryPlan({ caseData: planningCase, modelCallCheckpointRoot: this.checkpointRootForJob(current) })
       await writeJsonAtomic(path.join(companyRoot, 'industry-plan.json'), planning)
       await this.recordProgress(jobId, {
         type: 'agent_completed', stage: 'company_intake', phase: 'industry_chain_planning', operation: 'plan_imported_company',
@@ -574,15 +680,6 @@ async function discoverCases(root, companyIds) {
     .map(entry => path.join(runtimeRoot, entry.name))
   for (const companyId of companyIds) {
     const candidates = []
-    const bundledExample = path.join(root, 'examples', 'company-case.json')
-    if (companyId === '001') {
-      try {
-        const stat = await fs.stat(bundledExample)
-        candidates.push({ case_path: bundledExample, updated_at: stat.mtime.toISOString(), mtime: stat.mtimeMs })
-      } catch (error) {
-        if (error.code !== 'ENOENT') throw error
-      }
-    }
     for (const batchDirectory of batchDirectories) {
       const candidate = path.join(batchDirectory, 'companies', companyId, 'case.json')
       try {
@@ -600,7 +697,7 @@ async function discoverCases(root, companyIds) {
 
 function normalizeCompanyRecords(data) {
   const records = Array.isArray(data) ? data : data.records
-  if (!Array.isArray(records)) throw new Error('Company catalog does not contain records')
+  if (!Array.isArray(records)) throw new Error('company catalog does not contain records')
   return records.map(record => ({
     ...structuredClone(record),
     company_id: String(record.company_id || '').padStart(3, '0'),
