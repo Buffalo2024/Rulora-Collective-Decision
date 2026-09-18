@@ -31,6 +31,17 @@ function stageDecisionPrompt({ agent, phase, caseData, industryPlan, frozenDirec
   const calibrated = ['competition_calibrated', 'competition_calibrated_v2'].includes(mode)
   const stableIndustryOutput = mode === 'competition_calibrated_v2' && agent.agent_id === 'industry_chain_analyst' && !joint
   const agentProtocol = debateAgentProtocol(agent)
+  const disclosed = projectModelDisclosure({
+    task: joint ? '独立生成一次联合Action候选与Risk必要标签完整集合' : direction ? '独立生成授信调整方向' : '基于冻结授信方向独立生成风控建议',
+    decision_mode: mode,
+    operator_task: caseData.operator_task || null,
+    agent_protocol: agentProtocol,
+    industry_plan: industryPlan,
+    frozen_credit_direction: frozenDirection,
+    final_action_candidate: phase === 'risk_control_advice' ? ({ risk_up: -1, risk_flat: 0, risk_down: 1 }[frozenDirection] ?? null) : null,
+    case: compactDecisionCaseForPrompt(caseData)
+  }, 'independent_decision')
+  assertModelDisclosure(disclosed, 'independent_decision')
   return [
     {
       role: 'system',
@@ -80,16 +91,7 @@ function stageDecisionPrompt({ agent, phase, caseData, industryPlan, frozenDirec
     },
     {
       role: 'user',
-      content: JSON.stringify({
-        task: joint ? '独立生成一次联合Action候选与Risk必要标签完整集合' : direction ? '独立生成授信调整方向' : '基于冻结授信方向独立生成风控建议',
-        decision_mode: mode,
-        operator_task: caseData.operator_task || null,
-        agent_protocol: agentProtocol,
-        industry_plan: industryPlan,
-        frozen_credit_direction: frozenDirection,
-        final_action_candidate: phase === 'risk_control_advice' ? ({ risk_up: -1, risk_flat: 0, risk_down: 1 }[frozenDirection] ?? null) : null,
-        case: compactDecisionCaseForPrompt(caseData)
-      })
+      content: JSON.stringify(disclosed)
     }
   ]
 }
@@ -100,6 +102,18 @@ function selfImpactReviewPrompt({ agent, phase, ownDecision, peerDecisions, diff
   const calibrated = ['competition_calibrated', 'competition_calibrated_v2'].includes(mode)
   const stableIndustryOutput = mode === 'competition_calibrated_v2' && agent.agent_id === 'industry_chain_analyst' && !joint
   const agentProtocol = debateAgentProtocol(agent)
+  const disclosed = projectModelDisclosure({
+    task: '结合另外两席分析，决定保持或修改自己的当前阶段答案',
+    decision_mode: mode,
+    agent_protocol: agentProtocol,
+    own: ownDecision,
+    peers: peerDecisions,
+    differences: differencePacket,
+    frozen_credit_direction: frozenDirection,
+    selected_action: phase === 'risk_control_advice' ? ({ risk_up: -1, risk_flat: 0, risk_down: 1 }[frozenDirection] ?? null) : null,
+    evidence_index: evidenceIndex
+  }, 'broadcast_revision')
+  assertModelDisclosure(disclosed, 'broadcast_revision')
   return [
     {
       role: 'system',
@@ -135,17 +149,7 @@ function selfImpactReviewPrompt({ agent, phase, ownDecision, peerDecisions, diff
     },
     {
       role: 'user',
-      content: JSON.stringify({
-        task: '结合另外两席分析，决定保持或修改自己的当前阶段答案',
-        decision_mode: mode,
-        agent_protocol: agentProtocol,
-        own: ownDecision,
-        peers: peerDecisions,
-        differences: differencePacket,
-        frozen_credit_direction: frozenDirection,
-        selected_action: phase === 'risk_control_advice' ? ({ risk_up: -1, risk_flat: 0, risk_down: 1 }[frozenDirection] ?? null) : null,
-        evidence_index: evidenceIndex
-      })
+      content: JSON.stringify(disclosed)
     }
   ]
 }
@@ -163,6 +167,16 @@ function competitionCalibrationPrompt({ agent, frozenCase, initialOutputs, postB
     summary: compactText(item.summary, 500),
     evidence_grade: item.evidence_grade
   }))
+  const disclosed = projectModelDisclosure({
+    task: 'select_frozen_competition_candidates',
+    action_candidates: reviewCandidatePool.action_candidates,
+    risk_candidates: reviewCandidatePool.risk_candidates,
+    champion_decision: reviewCandidatePool.champion_decision,
+    support_statistics: reviewCandidatePool.support_statistics,
+    evidence_summary: evidenceSummary,
+    review_candidate_pool_hash: reviewCandidatePool.review_candidate_pool_hash
+  }, 'constrained_reviewer')
+  assertModelDisclosure(disclosed, 'constrained_reviewer')
   return [
     {
       role: 'system',
@@ -178,15 +192,7 @@ function competitionCalibrationPrompt({ agent, frozenCase, initialOutputs, postB
     },
     {
       role: 'user',
-      content: JSON.stringify({
-        task: 'select_frozen_competition_candidates',
-        action_candidates: reviewCandidatePool.action_candidates,
-        risk_candidates: reviewCandidatePool.risk_candidates,
-        champion_decision: reviewCandidatePool.champion_decision,
-        support_statistics: reviewCandidatePool.support_statistics,
-        evidence_summary: evidenceSummary,
-        review_candidate_pool_hash: reviewCandidatePool.review_candidate_pool_hash
-      })
+      content: JSON.stringify(disclosed)
     }
   ]
 }
@@ -327,3 +333,4 @@ module.exports = {
   selfImpactReviewPrompt,
   stageDecisionPrompt
 }
+const { assertModelDisclosure, projectModelDisclosure } = require('./role-disclosure')

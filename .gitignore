@@ -7,3 +7,6 @@ examples/output/
 *.local.env
 *.log
 .DS_Store
+
+# LangGraph API
+.langgraph_api

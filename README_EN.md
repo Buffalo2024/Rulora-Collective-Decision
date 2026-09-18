@@ -46,10 +46,15 @@ Program allowlists rather than prompt convention alone.
 ```bash
 npm run example:langgraph
 npm run test:minimal
+npm run eval:reliability
+npx @langchain/langgraph-cli dev --no-browser
 ```
 
 See [the LangGraph reference application note](docs/langgraph-reference-application.md) for invariants,
 rejection paths, information-disclosure boundaries, and the measurements required for broader reliability claims.
+The versioned public corpus currently contains 10 carrier/semantic cases, 3 Reviewer-selection cases, and 3
+role-disclosure views. Its results describe only these deterministic fixtures; they are not model-accuracy or
+universal reliability claims.
 
 ```bash
 npm install

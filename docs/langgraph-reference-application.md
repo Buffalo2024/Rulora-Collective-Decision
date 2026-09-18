@@ -27,6 +27,8 @@ The minimal graph uses three fictional incident-response seats and does not requ
 npm install
 npm run example:langgraph
 npm run test:minimal
+npm run eval:reliability
+npx @langchain/langgraph-cli dev --no-browser
 ```
 
 The three model fixtures deliberately contain normal JSON, fenced JSON, and JSON with a missing comma. The
@@ -59,6 +61,11 @@ instructions:
 The full credit-risk application adds bounded broadcast, quorum, checkpoints, replay, and human adjudication.
 The minimal example intentionally shows only the smallest reusable control chain.
 
+`langgraph.json` exports `rulora_governed_minimal`. It is registered by the current LangGraph.js CLI and can be
+opened in LangGraph Studio. The CLI is intentionally invoked with `npx` rather than installed as a repository
+dependency because its current scaffolding dependency chain contains an unresolved `extract-zip` advisory; the
+runtime dependency tree remains at zero known npm vulnerabilities.
+
 ## Evidence required before making reliability claims
 
 The repository currently proves deterministic examples and rejection paths. Broader claims should be published
@@ -73,3 +80,17 @@ only with a versioned corpus and the following measurements:
 
 Model quality and business accuracy are separate questions. These controls can preserve and govern a model
 decision; they do not prove that the underlying decision is correct.
+
+## Current versioned corpus
+
+`evaluation/reliability-corpus.json` is deliberately small and inspectable. Version `1.0.0` contains 10
+carrier/semantic fixtures, 3 constrained-Reviewer fixtures, and projections for all 3 model disclosure roles.
+Run `npm run eval:reliability` to reproduce the metrics. On this corpus:
+
+- accepted business-value preservation: `1.0`;
+- ambiguous or invalid output rejection: `1.0`;
+- forbidden Reviewer selection rejection: `1.0`;
+- model-role view leakage: `0.0`.
+
+These values are regression evidence for the checked-in fixtures, not estimates for arbitrary providers or
+production traffic. Expanding the corpus with independently contributed real failure shapes is an explicit next step.

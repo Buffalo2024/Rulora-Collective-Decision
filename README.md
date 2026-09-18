@@ -64,10 +64,16 @@ Reviewer 只能选择冻结候选池中的 ID；候选不足法定人数时流�
 ```bash
 npm run example:langgraph
 npm run test:minimal
+npm run eval:reliability
+npx @langchain/langgraph-cli dev --no-browser
 ```
 
 设计边界、拒绝路径和可量化的稳定性指标见
 [`docs/langgraph-reference-application.md`](docs/langgraph-reference-application.md)。
+
+当前版本化小样本包含 10 个载体/语义故障案例、3 个 Reviewer 候选选择案例和 3 类
+角色披露视图。评估结果只证明这个公开小样本中的确定性约束，不代表模型判断准确率，
+也不代表所有模型输出的通用稳定率。
 
 ## 本地运行
 
