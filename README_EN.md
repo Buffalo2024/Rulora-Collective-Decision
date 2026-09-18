@@ -12,8 +12,8 @@ It is an independent scenario repository for [Rulora](https://github.com/Buffalo
 [Report Agent](https://github.com/Buffalo2024/Rulora-Report-Agent) and
 [AGTI](https://github.com/Buffalo2024/Rulora-AGTI).
 
-Rulora and this example were created through vibe coding by an author without a professional programming
-background. Reproducible technical review and independently evaluated improvements are welcome.
+This example remains under active research and development. Reproducible technical review and independently
+evaluated improvements are welcome.
 
 ## Research limitation
 
